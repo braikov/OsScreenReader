@@ -61,7 +61,7 @@ internal sealed class HotkeyContext : ApplicationContext
         Directory.CreateDirectory(sessionFolder);
 
         var bounds = Screen.PrimaryScreen.Bounds;
-        SaveScreenshot(Path.Combine(sessionFolder, "baseline.png"), bounds);
+        SaveScreenshot(Path.Combine(sessionFolder, "baseline.png"), bounds, out var lastSize);
 
         var framesFolder = Path.Combine(sessionFolder, "frames");
         Directory.CreateDirectory(framesFolder);
@@ -83,8 +83,11 @@ internal sealed class HotkeyContext : ApplicationContext
 
                 Cursor.Position = new Point(x, y);
                 var framePath = Path.Combine(framesFolder, $"frame_{savedCount + 1:D6}.png");
-                SaveScreenshot(framePath, bounds);
-                savedCount++;
+                if (TrySaveScreenshotIfDifferent(framePath, bounds, lastSize, out var newSize))
+                {
+                    lastSize = newSize;
+                    savedCount++;
+                }
             }
         }
 
@@ -95,7 +98,7 @@ internal sealed class HotkeyContext : ApplicationContext
             MessageBoxIcon.Information);
     }
 
-    private static void SaveScreenshot(string path, Rectangle bounds)
+    private static void SaveScreenshot(string path, Rectangle bounds, out long fileSize)
     {
         using var bitmap = new Bitmap(bounds.Width, bounds.Height);
         using (var graphics = Graphics.FromImage(bitmap))
@@ -103,7 +106,38 @@ internal sealed class HotkeyContext : ApplicationContext
             graphics.CopyFromScreen(bounds.Left, bounds.Top, 0, 0, bounds.Size);
         }
 
-        bitmap.Save(path, System.Drawing.Imaging.ImageFormat.Png);
+        using var memoryStream = new MemoryStream();
+        bitmap.Save(memoryStream, System.Drawing.Imaging.ImageFormat.Png);
+        fileSize = memoryStream.Length;
+        memoryStream.Position = 0;
+        using var fileStream = File.Create(path);
+        memoryStream.CopyTo(fileStream);
+    }
+
+    private static bool TrySaveScreenshotIfDifferent(
+        string path,
+        Rectangle bounds,
+        long previousSize,
+        out long fileSize)
+    {
+        using var bitmap = new Bitmap(bounds.Width, bounds.Height);
+        using (var graphics = Graphics.FromImage(bitmap))
+        {
+            graphics.CopyFromScreen(bounds.Left, bounds.Top, 0, 0, bounds.Size);
+        }
+
+        using var memoryStream = new MemoryStream();
+        bitmap.Save(memoryStream, System.Drawing.Imaging.ImageFormat.Png);
+        fileSize = memoryStream.Length;
+        if (fileSize == 0 || fileSize == previousSize)
+        {
+            return false;
+        }
+
+        memoryStream.Position = 0;
+        using var fileStream = File.Create(path);
+        memoryStream.CopyTo(fileStream);
+        return true;
     }
 
     private static int ReadPositiveIntSetting(string key, int defaultValue)
