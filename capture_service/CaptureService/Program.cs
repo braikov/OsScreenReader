@@ -52,26 +52,64 @@ internal sealed class HotkeyContext : ApplicationContext
             return;
         }
 
+        var stepPixels = ReadPositiveIntSetting("StepPixels", 25);
+        var maxScreenshots = ReadPositiveIntSetting("MaxScreenshots", 2000);
+
         Directory.CreateDirectory(rootFolder);
         var sessionId = DateTimeOffset.UtcNow.ToString("yyyyMMdd_HHmmss");
         var sessionFolder = Path.Combine(rootFolder, sessionId);
         Directory.CreateDirectory(sessionFolder);
 
         var bounds = Screen.PrimaryScreen.Bounds;
+        SaveScreenshot(Path.Combine(sessionFolder, "baseline.png"), bounds);
+
+        var framesFolder = Path.Combine(sessionFolder, "frames");
+        Directory.CreateDirectory(framesFolder);
+
+        var savedCount = 0;
+        for (var y = bounds.Top; y < bounds.Bottom; y += stepPixels)
+        {
+            for (var x = bounds.Left; x < bounds.Right; x += stepPixels)
+            {
+                if (savedCount >= maxScreenshots)
+                {
+                    MessageBox.Show(
+                        $"Reached max screenshots limit ({maxScreenshots}).",
+                        "Capture Service",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Information);
+                    return;
+                }
+
+                Cursor.Position = new Point(x, y);
+                var framePath = Path.Combine(framesFolder, $"frame_{savedCount + 1:D6}.png");
+                SaveScreenshot(framePath, bounds);
+                savedCount++;
+            }
+        }
+
+        MessageBox.Show(
+            $"Saved baseline and {savedCount} frames to {sessionFolder}",
+            "Capture Service",
+            MessageBoxButtons.OK,
+            MessageBoxIcon.Information);
+    }
+
+    private static void SaveScreenshot(string path, Rectangle bounds)
+    {
         using var bitmap = new Bitmap(bounds.Width, bounds.Height);
         using (var graphics = Graphics.FromImage(bitmap))
         {
             graphics.CopyFromScreen(bounds.Left, bounds.Top, 0, 0, bounds.Size);
         }
 
-        var outputPath = Path.Combine(sessionFolder, "baseline.png");
-        bitmap.Save(outputPath, System.Drawing.Imaging.ImageFormat.Png);
+        bitmap.Save(path, System.Drawing.Imaging.ImageFormat.Png);
+    }
 
-        MessageBox.Show(
-            $"Saved screenshot to {outputPath}",
-            "Capture Service",
-            MessageBoxButtons.OK,
-            MessageBoxIcon.Information);
+    private static int ReadPositiveIntSetting(string key, int defaultValue)
+    {
+        var rawValue = ConfigurationManager.AppSettings[key];
+        return int.TryParse(rawValue, out var parsed) && parsed > 0 ? parsed : defaultValue;
     }
 }
 
