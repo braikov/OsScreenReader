@@ -69,6 +69,7 @@ internal sealed class HotkeyContext : ApplicationContext
 
         var stepPixels = ReadPositiveIntSetting("StepPixels", 25);
         var maxScreenshots = ReadPositiveIntSetting("MaxScreenshots", 2000);
+        var interCaptureDelayMs = ReadPositiveIntSetting("InterCaptureDelayMs", 2000);
 
         Directory.CreateDirectory(rootFolder);
         var sessionId = DateTimeOffset.UtcNow.ToString("yyyyMMdd_HHmmss");
@@ -99,6 +100,7 @@ internal sealed class HotkeyContext : ApplicationContext
                 }
 
                 Cursor.Position = new Point(x, y);
+                Thread.Sleep(interCaptureDelayMs);
                 var framePath = Path.Combine(framesFolder, $"frame_{savedCount + 1:D6}.png");
                 if (TrySaveScreenshotIfDifferent(framePath, bounds, lastSize, out var newSize))
                 {

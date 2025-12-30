@@ -92,6 +92,8 @@ def process_sessions(
             (element, f"elem_{index + 1:04d}") for index, element in enumerate(merged)
         ]
 
+        tooltip_map = _pair_tooltips(numbered)
+
         def has_text(item: DetectedRegion) -> bool:
             """Return True when OCR produced non-empty text."""
             return bool(item.text and item.text.strip())
@@ -112,6 +114,15 @@ def process_sessions(
                         "text": element.text,
                         "confidence": element.confidence,
                         "source": element.source,
+                        "tooltip": (
+                            {
+                                "text": tooltip_map[element_id].text,
+                                "confidence": tooltip_map[element_id].confidence,
+                                "bbox": asdict(tooltip_map[element_id].bbox),
+                            }
+                            if element_id in tooltip_map
+                            else None
+                        ),
                     }
                     for element, element_id in items
                 ],
@@ -312,3 +323,53 @@ def _iou_boxes(a: BoundingBox, b: BoundingBox) -> float:
     intersection = (x_right - x_left) * (y_bottom - y_top)
     union = a.w * a.h + b.w * b.h - intersection
     return intersection / union if union > 0 else 0.0
+
+
+def _pair_tooltips(items: list[tuple[DetectedRegion, str]]) -> dict[str, DetectedRegion]:
+    """
+    Attempt to pair each element with a likely tooltip region.
+
+    Heuristic: pick the nearest larger box with different text. Prefers overlapping
+    or adjacent regions; ignores empty-text regions.
+    """
+    tooltip_map: dict[str, DetectedRegion] = {}
+    for element, element_id in items:
+        if not element.text:
+            continue
+
+        best: DetectedRegion | None = None
+        best_score = float("inf")
+        for candidate, _ in items:
+            if candidate is element or not candidate.text:
+                continue
+            if IoUDeduplicator._same_text(element.text, candidate.text):
+                continue
+
+            if _bbox_area(candidate.bbox) <= _bbox_area(element.bbox):
+                continue
+
+            gap = _edge_distance(element.bbox, candidate.bbox)
+            if gap > 400:  # too far to be a tooltip
+                continue
+
+            score = gap + _bbox_area(candidate.bbox) * 1e-5  # favor closer, modest size
+            if score < best_score:
+                best_score = score
+                best = candidate
+
+        if best is not None:
+            tooltip_map[element_id] = best
+
+    return tooltip_map
+
+
+def _bbox_area(bbox: BoundingBox) -> int:
+    """Compute area of a bounding box."""
+    return max(0, bbox.w) * max(0, bbox.h)
+
+
+def _edge_distance(a: BoundingBox, b: BoundingBox) -> float:
+    """Minimum edge-to-edge distance between two boxes (0 if overlapping)."""
+    dx = max(0, max(a.x, b.x) - min(a.x + a.w, b.x + b.w))
+    dy = max(0, max(a.y, b.y) - min(a.y + a.h, b.y + b.h))
+    return (dx ** 2 + dy ** 2) ** 0.5
