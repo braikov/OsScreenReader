@@ -315,7 +315,7 @@ def _pair_tooltips(items: list[tuple[DetectedRegion, str]]) -> dict[str, Detecte
     Attempt to pair each element with a likely tooltip region.
 
     Heuristic: choose the nearest larger box with different text; prefer closer
-    and modest-size candidates; ignore empty-text regions.
+    and modest-size candidates; ignore empty-text regions. Requires non-overlap.
     """
     tooltip_map: dict[str, DetectedRegion] = {}
     for element, element_id in items:
@@ -331,11 +331,14 @@ def _pair_tooltips(items: list[tuple[DetectedRegion, str]]) -> dict[str, Detecte
             if _same_text(element.text, candidate.text):
                 continue
 
-            if _bbox_area(candidate.bbox) <= _bbox_area(element.bbox):
+            if _bbox_area(candidate.bbox) <= _bbox_area(element.bbox) * 1.2:
                 continue
 
             gap = _edge_distance(element.bbox, candidate.bbox)
-            if gap > 400:
+            if gap > 300:
+                continue
+
+            if _overlaps(element.bbox, candidate.bbox):
                 continue
 
             score = gap + _bbox_area(candidate.bbox) * 1e-5
@@ -359,6 +362,16 @@ def _edge_distance(a: BoundingBox, b: BoundingBox) -> float:
     dx = max(0, max(a.x, b.x) - min(a.x + a.w, b.x + b.w))
     dy = max(0, max(a.y, b.y) - min(a.y + a.h, b.y + b.h))
     return (dx ** 2 + dy ** 2) ** 0.5
+
+
+def _overlaps(a: BoundingBox, b: BoundingBox) -> bool:
+    """Return True when two boxes overlap."""
+    return not (
+        a.x + a.w <= b.x
+        or b.x + b.w <= a.x
+        or a.y + a.h <= b.y
+        or b.y + b.h <= a.y
+    )
 
 
 def _same_text(a: str | None, b: str | None) -> bool:
