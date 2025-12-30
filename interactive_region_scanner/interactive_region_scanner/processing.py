@@ -45,7 +45,8 @@ def process_sessions(
         for index, frame_path in enumerate(frames, start=1):
             frame_start = time.perf_counter()
             regions_start = time.perf_counter()
-            regions = diff_detector.find_regions(previous_path, frame_path)
+            regions_raw = diff_detector.find_regions(previous_path, frame_path)
+            regions = _dedup_boxes(regions_raw)
             regions_ms = (time.perf_counter() - regions_start) * 1000
 
             ocr_ms_total = 0.0
@@ -79,7 +80,8 @@ def process_sessions(
             elapsed_ms = (time.perf_counter() - frame_start) * 1000
             print(
                 f"{index} of {total_frames} processed in {elapsed_ms:.0f} ms "
-                f"(diff {regions_ms:.0f} ms, ocr {ocr_ms_total:.0f} ms over {len(regions)} regions)"
+                f"(diff {regions_ms:.0f} ms, ocr {ocr_ms_total:.0f} ms over "
+                f"{len(regions)} regions, raw {len(regions_raw)})"
             )
 
         if delete_processed_frames and previous_path != baseline_path:
@@ -266,3 +268,27 @@ class IoUDeduplicator(RegionDeduplicator):
         intersection = (x_right - x_left) * (y_bottom - y_top)
         union = a.w * a.h + b.w * b.h - intersection
         return intersection / union if union > 0 else 0.0
+
+
+def _dedup_boxes(regions: list[BoundingBox], iou_threshold: float = 0.5) -> list[BoundingBox]:
+    """Deduplicate bounding boxes before running OCR to avoid redundant work."""
+    deduped: list[BoundingBox] = []
+    for box in regions:
+        if not any(_iou_boxes(box, existing) >= iou_threshold for existing in deduped):
+            deduped.append(box)
+    return deduped
+
+
+def _iou_boxes(a: BoundingBox, b: BoundingBox) -> float:
+    """Intersection-over-union between two bounding boxes."""
+    x_left = max(a.x, b.x)
+    y_top = max(a.y, b.y)
+    x_right = min(a.x + a.w, b.x + b.w)
+    y_bottom = min(a.y + a.h, b.y + b.h)
+
+    if x_right <= x_left or y_bottom <= y_top:
+        return 0.0
+
+    intersection = (x_right - x_left) * (y_bottom - y_top)
+    union = a.w * a.h + b.w * b.h - intersection
+    return intersection / union if union > 0 else 0.0
