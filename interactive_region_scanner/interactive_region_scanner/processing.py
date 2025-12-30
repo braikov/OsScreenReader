@@ -260,8 +260,10 @@ def _write_per_frame_outputs(
     primary: DetectedRegion | None,
     tooltips: list[DetectedRegion],
 ) -> None:
-    """Write per-frame debug payload and crops next to the frame."""
-    frame_dir = session_path / frame_path.stem
+    """Write per-frame debug payload and crops under a results folder."""
+    results_dir = session_path / "results"
+    results_dir.mkdir(exist_ok=True)
+    frame_dir = results_dir / frame_path.stem
     frame_dir.mkdir(exist_ok=True)
     # Keep originals handy for visual inspection.
     shutil.copy2(frame_path, frame_dir / frame_path.name)
