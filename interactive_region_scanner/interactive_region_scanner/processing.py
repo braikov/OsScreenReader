@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 import time
 from dataclasses import asdict
 from pathlib import Path
@@ -239,6 +240,9 @@ def _write_per_frame_outputs(
     """Write per-frame debug payload and crops next to the frame."""
     frame_dir = session_path / frame_path.stem
     frame_dir.mkdir(exist_ok=True)
+    # Keep originals handy for visual inspection.
+    shutil.copy2(frame_path, frame_dir / frame_path.name)
+    shutil.copy2(baseline_path, frame_dir / "baseline.png")
     payload = {
         "schema_version": "1.0",
         "baseline": baseline_path.name,
