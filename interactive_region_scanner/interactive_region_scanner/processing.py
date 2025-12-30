@@ -252,7 +252,27 @@ class IoUDeduplicator(RegionDeduplicator):
         for other in existing:
             if self._iou(region.bbox, other.bbox) >= self._iou_threshold:
                 return True
+            if self._same_text(region.text, other.text) and self._vertical_overlap(region.bbox, other.bbox) >= 0.7:
+                return True
         return False
+
+    @staticmethod
+    def _same_text(a: str | None, b: str | None) -> bool:
+        """Case-insensitive text equality ignoring surrounding whitespace."""
+        if a is None or b is None:
+            return False
+        return a.strip().lower() == b.strip().lower()
+
+    @staticmethod
+    def _vertical_overlap(a: BoundingBox, b: BoundingBox) -> float:
+        """Compute vertical overlap ratio relative to the smaller height."""
+        top = max(a.y, b.y)
+        bottom = min(a.y + a.h, b.y + b.h)
+        if bottom <= top:
+            return 0.0
+        overlap = bottom - top
+        min_height = min(a.h, b.h)
+        return overlap / min_height if min_height > 0 else 0.0
 
     @staticmethod
     def _iou(a: BoundingBox, b: BoundingBox) -> float:
