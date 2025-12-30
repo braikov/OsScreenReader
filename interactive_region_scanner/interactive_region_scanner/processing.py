@@ -28,6 +28,7 @@ def process_sessions(
     diff_detector: DiffDetector,
     ocr_engine: OcrEngine,
     deduplicator: RegionDeduplicator,
+    delete_processed_frames: bool = True,
 ) -> None:
     """Run the processing pipeline for all sessions without results."""
     for session_path in repository.list_sessions():
@@ -67,12 +68,13 @@ def process_sessions(
                 )
 
             if previous_path != baseline_path:
-                frame_provider.delete_frame(previous_path)
+                if delete_processed_frames:
+                    frame_provider.delete_frame(previous_path)
             previous_path = frame_path
             elapsed_ms = (time.perf_counter() - frame_start) * 1000
             print(f"{index} of {total_frames} processed in {elapsed_ms:.0f} ms")
 
-        if previous_path != baseline_path:
+        if delete_processed_frames and previous_path != baseline_path:
             frame_provider.delete_frame(previous_path)
 
         merged = deduplicator.merge(elements)

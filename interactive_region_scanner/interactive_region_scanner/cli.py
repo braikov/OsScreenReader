@@ -31,7 +31,15 @@ def main() -> None:
     )
     deduplicator = IoUDeduplicator(iou_threshold=float(config.get("iou_threshold", 0.5)))
 
-    process_sessions(repository, frame_provider, diff_detector, ocr_engine, deduplicator)
+    delete_processed_frames = bool(config.get("delete_frames", False))
+    process_sessions(
+        repository,
+        frame_provider,
+        diff_detector,
+        ocr_engine,
+        deduplicator,
+        delete_processed_frames=delete_processed_frames,
+    )
 
 
 if __name__ == "__main__":
