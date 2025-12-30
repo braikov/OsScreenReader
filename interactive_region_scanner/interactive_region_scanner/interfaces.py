@@ -53,6 +53,11 @@ class SessionRepository(ABC):
         """Persist the computed result JSON."""
         raise NotImplementedError
 
+    @abstractmethod
+    def write_no_text_result(self, session_path: Path, payload: dict) -> None:
+        """Persist regions that lack recognized text."""
+        raise NotImplementedError
+
 
 class FrameProvider(ABC):
     """Interface for accessing and pruning capture frames."""

@@ -80,22 +80,36 @@ def process_sessions(
             frame_provider.delete_frame(previous_path)
 
         merged = deduplicator.merge(elements)
-        payload = {
-            "schema_version": "1.0",
-            "session_id": session_metadata.get("session_id"),
-            "baseline": baseline_path.name,
-            "elements": [
-                {
-                    "id": f"elem_{index + 1:04d}",
-                    "bbox": asdict(element.bbox),
-                    "text": element.text,
-                    "confidence": element.confidence,
-                    "source": element.source,
-                }
-                for index, element in enumerate(merged)
-            ],
-        }
-        repository.write_result(session_path, payload)
+        numbered: list[tuple[DetectedRegion, str]] = [
+            (element, f"elem_{index + 1:04d}") for index, element in enumerate(merged)
+        ]
+
+        def has_text(item: DetectedRegion) -> bool:
+            return bool(item.text and item.text.strip())
+
+        with_text = [pair for pair in numbered if has_text(pair[0])]
+        without_text = [pair for pair in numbered if not has_text(pair[0])]
+        sorted_with_text = sorted(with_text, key=lambda pair: pair[0].text.strip().lower()) if with_text else []
+
+        def build_payload(items: list[tuple[DetectedRegion, str]]) -> dict:
+            return {
+                "schema_version": "1.0",
+                "session_id": session_metadata.get("session_id"),
+                "baseline": baseline_path.name,
+                "elements": [
+                    {
+                        "id": element_id,
+                        "bbox": asdict(element.bbox),
+                        "text": element.text,
+                        "confidence": element.confidence,
+                        "source": element.source,
+                    }
+                    for element, element_id in items
+                ],
+            }
+
+        repository.write_result(session_path, build_payload(sorted_with_text))
+        repository.write_no_text_result(session_path, build_payload(without_text))
 
 
 class FileSessionRepository(SessionRepository):
@@ -122,6 +136,11 @@ class FileSessionRepository(SessionRepository):
     def write_result(self, session_path: Path, payload: dict) -> None:
         """Write the result.json payload for a session."""
         output_path = session_path / "result.json"
+        output_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    def write_no_text_result(self, session_path: Path, payload: dict) -> None:
+        """Write the result.notext.json payload for a session."""
+        output_path = session_path / "result.notext.json"
         output_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
