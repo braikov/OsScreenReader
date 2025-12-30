@@ -18,3 +18,5 @@
 # OS
 Thumbs.db
 .DS_Store
+/interactive_region_scanner/env
+/interactive_region_scanner/interactive_region_scanner/__pycache__

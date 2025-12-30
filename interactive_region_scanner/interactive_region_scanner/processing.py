@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import time
 from dataclasses import asdict
 from pathlib import Path
 from typing import Iterable
@@ -36,10 +37,12 @@ def process_sessions(
         session_metadata = repository.load_session_metadata(session_path)
         baseline_path = frame_provider.baseline_path(session_path)
         frames = list(frame_provider.frame_paths(session_path))
+        total_frames = len(frames)
         elements: list[DetectedRegion] = []
 
         previous_path = baseline_path
-        for frame_path in frames:
+        for index, frame_path in enumerate(frames, start=1):
+            frame_start = time.perf_counter()
             regions = diff_detector.find_regions(previous_path, frame_path)
             for region in regions:
                 ocr_result = ocr_engine.recognize(frame_path, region)
@@ -66,6 +69,8 @@ def process_sessions(
             if previous_path != baseline_path:
                 frame_provider.delete_frame(previous_path)
             previous_path = frame_path
+            elapsed_ms = (time.perf_counter() - frame_start) * 1000
+            print(f"{index} of {total_frames} processed in {elapsed_ms:.0f} ms")
 
         if previous_path != baseline_path:
             frame_provider.delete_frame(previous_path)
