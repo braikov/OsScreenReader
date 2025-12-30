@@ -39,4 +39,4 @@
 
 ## Notes
 - The capture service does **not** compute diffs or OCR.
-- The capture service only writes to disk; processing is deferred to the OCR worker.
+- The capture service only writes to disk; processing is deferred to the interactive region scanner.

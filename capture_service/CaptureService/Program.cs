@@ -7,6 +7,9 @@ namespace CaptureService;
 
 internal static class Program
 {
+    /// <summary>
+    /// Application entry point for the capture service.
+    /// </summary>
     [STAThread]
     private static void Main()
     {
@@ -19,16 +22,25 @@ internal static class Program
     }
 }
 
+/// <summary>
+/// Application context that owns the hotkey window and capture lifecycle.
+/// </summary>
 internal sealed class HotkeyContext : ApplicationContext
 {
     private readonly HotkeyWindow _window;
 
+    /// <summary>
+    /// Initializes the hotkey context and registers the capture handler.
+    /// </summary>
     public HotkeyContext()
     {
         _window = new HotkeyWindow();
         _window.HotkeyPressed += (_, _) => CaptureScreenshot();
     }
 
+    /// <summary>
+    /// Releases resources when the application context is disposed.
+    /// </summary>
     protected override void Dispose(bool disposing)
     {
         if (disposing)
@@ -39,6 +51,9 @@ internal sealed class HotkeyContext : ApplicationContext
         base.Dispose(disposing);
     }
 
+    /// <summary>
+    /// Captures the baseline and grid frame screenshots for the active session.
+    /// </summary>
     private static void CaptureScreenshot()
     {
         var rootFolder = ConfigurationManager.AppSettings["RootFolder"];
@@ -98,6 +113,9 @@ internal sealed class HotkeyContext : ApplicationContext
             MessageBoxIcon.Information);
     }
 
+    /// <summary>
+    /// Captures the screen bounds and saves the bitmap to disk.
+    /// </summary>
     private static void SaveScreenshot(string path, Rectangle bounds, out long fileSize)
     {
         using var bitmap = new Bitmap(bounds.Width, bounds.Height);
@@ -114,6 +132,9 @@ internal sealed class HotkeyContext : ApplicationContext
         memoryStream.CopyTo(fileStream);
     }
 
+    /// <summary>
+    /// Captures the screen and saves only when the PNG size differs from the previous capture.
+    /// </summary>
     private static bool TrySaveScreenshotIfDifferent(
         string path,
         Rectangle bounds,
@@ -140,6 +161,9 @@ internal sealed class HotkeyContext : ApplicationContext
         return true;
     }
 
+    /// <summary>
+    /// Reads a positive integer setting with a fallback default.
+    /// </summary>
     private static int ReadPositiveIntSetting(string key, int defaultValue)
     {
         var rawValue = ConfigurationManager.AppSettings[key];
@@ -147,6 +171,9 @@ internal sealed class HotkeyContext : ApplicationContext
     }
 }
 
+/// <summary>
+/// Hidden native window that registers and listens for the hotkey.
+/// </summary>
 internal sealed class HotkeyWindow : NativeWindow, IDisposable
 {
     private const int HotkeyId = 1;
@@ -155,6 +182,9 @@ internal sealed class HotkeyWindow : NativeWindow, IDisposable
 
     public event EventHandler? HotkeyPressed;
 
+    /// <summary>
+    /// Creates an invisible window and registers the Ctrl+PrintScreen hotkey.
+    /// </summary>
     public HotkeyWindow()
     {
         var cp = new CreateParams();
@@ -167,6 +197,9 @@ internal sealed class HotkeyWindow : NativeWindow, IDisposable
         }
     }
 
+    /// <summary>
+    /// Handles hotkey messages and notifies subscribers.
+    /// </summary>
     protected override void WndProc(ref Message m)
     {
         if (m.Msg == WmHotkey && m.WParam.ToInt32() == HotkeyId)
@@ -177,6 +210,9 @@ internal sealed class HotkeyWindow : NativeWindow, IDisposable
         base.WndProc(ref m);
     }
 
+    /// <summary>
+    /// Unregisters the hotkey and releases the native window handle.
+    /// </summary>
     public void Dispose()
     {
         UnregisterHotKey(_hWnd, HotkeyId);
