@@ -44,9 +44,15 @@ def process_sessions(
         previous_path = baseline_path
         for index, frame_path in enumerate(frames, start=1):
             frame_start = time.perf_counter()
+            regions_start = time.perf_counter()
             regions = diff_detector.find_regions(previous_path, frame_path)
+            regions_ms = (time.perf_counter() - regions_start) * 1000
+
+            ocr_ms_total = 0.0
             for region in regions:
+                ocr_start = time.perf_counter()
                 ocr_result = ocr_engine.recognize(frame_path, region)
+                ocr_ms_total += (time.perf_counter() - ocr_start) * 1000
                 if ocr_result is None:
                     elements.append(
                         DetectedRegion(
@@ -67,12 +73,14 @@ def process_sessions(
                     )
                 )
 
-            if previous_path != baseline_path:
-                if delete_processed_frames:
-                    frame_provider.delete_frame(previous_path)
+            if previous_path != baseline_path and delete_processed_frames:
+                frame_provider.delete_frame(previous_path)
             previous_path = frame_path
             elapsed_ms = (time.perf_counter() - frame_start) * 1000
-            print(f"{index} of {total_frames} processed in {elapsed_ms:.0f} ms")
+            print(
+                f"{index} of {total_frames} processed in {elapsed_ms:.0f} ms "
+                f"(diff {regions_ms:.0f} ms, ocr {ocr_ms_total:.0f} ms over {len(regions)} regions)"
+            )
 
         if delete_processed_frames and previous_path != baseline_path:
             frame_provider.delete_frame(previous_path)
