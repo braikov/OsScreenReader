@@ -84,7 +84,7 @@ internal sealed class HotkeyContext : ApplicationContext
 
         var savedCount = 0;
         var attemptedCount = 0;
-        for (var y = bounds.Top; y < bounds.Bottom; y += stepPixels)
+        for (var y = bounds.Top + stepPixels; y < bounds.Bottom; y += stepPixels)
         {
             for (var x = bounds.Left; x < bounds.Right; x += stepPixels)
             {
