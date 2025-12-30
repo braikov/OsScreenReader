@@ -1,6 +1,7 @@
 using System.Configuration;
 using System.Drawing;
 using System.Runtime.InteropServices;
+using System.Security.Cryptography;
 using System.Windows.Forms;
 
 namespace CaptureService;
@@ -69,6 +70,7 @@ internal sealed class HotkeyContext : ApplicationContext
 
         var stepPixels = ReadPositiveIntSetting("StepPixels", 25);
         var maxScreenshots = ReadPositiveIntSetting("MaxScreenshots", 2000);
+        var interCaptureDelayMs = ReadPositiveIntSetting("InterCaptureDelayMs", 2000);
 
         Directory.CreateDirectory(rootFolder);
         var sessionId = DateTimeOffset.UtcNow.ToString("yyyyMMdd_HHmmss");
@@ -76,20 +78,25 @@ internal sealed class HotkeyContext : ApplicationContext
         Directory.CreateDirectory(sessionFolder);
 
         var bounds = Screen.PrimaryScreen.Bounds;
-        SaveScreenshot(Path.Combine(sessionFolder, "baseline.png"), bounds, out var lastSize);
+        var baselineBytes = CaptureScreenshot(bounds, out var baselineSize);
+        var baselineHash = ComputeHash(baselineBytes);
+        SaveScreenshot(Path.Combine(sessionFolder, "baseline.png"), baselineBytes);
 
         var framesFolder = Path.Combine(sessionFolder, "frames");
         Directory.CreateDirectory(framesFolder);
 
         var savedCount = 0;
-        for (var y = bounds.Top; y < bounds.Bottom; y += stepPixels)
+        var attemptedCount = 0;
+        var previousHash = baselineHash;
+        for (var y = bounds.Top + stepPixels; y < bounds.Bottom; y += stepPixels)
         {
             for (var x = bounds.Left; x < bounds.Right; x += stepPixels)
             {
-                if (savedCount >= maxScreenshots)
+                attemptedCount++;
+                if (attemptedCount > maxScreenshots)
                 {
                     MessageBox.Show(
-                        $"Reached max screenshots limit ({maxScreenshots}).",
+                        $"Reached max screenshots limit ({maxScreenshots}) after {savedCount} saved.",
                         "Capture Service",
                         MessageBoxButtons.OK,
                         MessageBoxIcon.Information);
@@ -97,26 +104,27 @@ internal sealed class HotkeyContext : ApplicationContext
                 }
 
                 Cursor.Position = new Point(x, y);
+                Thread.Sleep(interCaptureDelayMs);
                 var framePath = Path.Combine(framesFolder, $"frame_{savedCount + 1:D6}.png");
-                if (TrySaveScreenshotIfDifferent(framePath, bounds, lastSize, out var newSize))
+                if (TrySaveScreenshotIfDifferent(framePath, bounds, baselineHash, previousHash, out var currentHash, out var newSize))
                 {
-                    lastSize = newSize;
+                    previousHash = currentHash;
                     savedCount++;
                 }
             }
         }
 
         MessageBox.Show(
-            $"Saved baseline and {savedCount} frames to {sessionFolder}",
+            $"Saved baseline and {savedCount} frames (attempted {attemptedCount}) to {sessionFolder}",
             "Capture Service",
             MessageBoxButtons.OK,
             MessageBoxIcon.Information);
     }
 
     /// <summary>
-    /// Captures the screen bounds and saves the bitmap to disk.
+    /// Captures the screen bounds and returns the PNG bytes.
     /// </summary>
-    private static void SaveScreenshot(string path, Rectangle bounds, out long fileSize)
+    private static byte[] CaptureScreenshot(Rectangle bounds, out long fileSize)
     {
         using var bitmap = new Bitmap(bounds.Width, bounds.Height);
         using (var graphics = Graphics.FromImage(bitmap))
@@ -127,37 +135,66 @@ internal sealed class HotkeyContext : ApplicationContext
         using var memoryStream = new MemoryStream();
         bitmap.Save(memoryStream, System.Drawing.Imaging.ImageFormat.Png);
         fileSize = memoryStream.Length;
-        memoryStream.Position = 0;
-        using var fileStream = File.Create(path);
-        memoryStream.CopyTo(fileStream);
+        return memoryStream.ToArray();
     }
 
     /// <summary>
-    /// Captures the screen and saves only when the PNG size differs from the previous capture.
+    /// Saves a PNG byte array to disk.
+    /// </summary>
+    private static void SaveScreenshot(string path, byte[] pngBytes)
+    {
+        File.WriteAllBytes(path, pngBytes);
+    }
+
+    /// <summary>
+    /// Captures the screen and saves only when the content differs from the baseline and previous capture.
     /// </summary>
     private static bool TrySaveScreenshotIfDifferent(
         string path,
         Rectangle bounds,
-        long previousSize,
+        byte[] baselineHash,
+        byte[] previousHash,
+        out byte[] currentHash,
         out long fileSize)
     {
-        using var bitmap = new Bitmap(bounds.Width, bounds.Height);
-        using (var graphics = Graphics.FromImage(bitmap))
+        var pngBytes = CaptureScreenshot(bounds, out fileSize);
+        if (fileSize == 0)
         {
-            graphics.CopyFromScreen(bounds.Left, bounds.Top, 0, 0, bounds.Size);
+            currentHash = Array.Empty<byte>();
+            return false;
         }
 
-        using var memoryStream = new MemoryStream();
-        bitmap.Save(memoryStream, System.Drawing.Imaging.ImageFormat.Png);
-        fileSize = memoryStream.Length;
-        if (fileSize == 0 || fileSize == previousSize)
+        currentHash = ComputeHash(pngBytes);
+        if (HashesEqual(currentHash, previousHash) || HashesEqual(currentHash, baselineHash))
         {
             return false;
         }
 
-        memoryStream.Position = 0;
-        using var fileStream = File.Create(path);
-        memoryStream.CopyTo(fileStream);
+        SaveScreenshot(path, pngBytes);
+        return true;
+    }
+
+    private static byte[] ComputeHash(byte[] data)
+    {
+        using var sha = SHA256.Create();
+        return sha.ComputeHash(data);
+    }
+
+    private static bool HashesEqual(byte[] a, byte[] b)
+    {
+        if (a.Length != b.Length)
+        {
+            return false;
+        }
+
+        for (var i = 0; i < a.Length; i++)
+        {
+            if (a[i] != b[i])
+            {
+                return false;
+            }
+        }
+
         return true;
     }
 

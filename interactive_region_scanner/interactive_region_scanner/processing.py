@@ -44,7 +44,7 @@ def process_sessions(
         previous_path = baseline_path
         for index, frame_path in enumerate(frames, start=1):
             frame_start = time.perf_counter()
-            regions = diff_detector.find_regions(previous_path, frame_path)
+            regions = diff_detector.find_regions(baseline_path, frame_path)
             per_frame_elements: list[DetectedRegion] = []
             for region in regions:
                 ocr_result = ocr_engine.recognize(frame_path, region)
