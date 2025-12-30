@@ -5,7 +5,7 @@ import shutil
 import time
 from dataclasses import asdict
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, Tuple
 
 import cv2
 import numpy as np
@@ -56,7 +56,6 @@ def process_sessions(
                         confidence=0.0,
                         source="hover-diff",
                     )
-                    elements.append(detected)
                     per_frame_elements.append(detected)
                     continue
 
@@ -66,10 +65,12 @@ def process_sessions(
                     confidence=ocr_result.confidence,
                     source="hover-diff",
                 )
-                elements.append(detected)
                 per_frame_elements.append(detected)
 
-            _write_per_frame_outputs(session_path, baseline_path, frame_path, per_frame_elements)
+            primary, tooltips = _separate_primary_and_tooltips(frame_path, per_frame_elements)
+            if primary is not None:
+                elements.append(primary)
+            _write_per_frame_outputs(session_path, baseline_path, frame_path, primary, tooltips)
 
             if delete_processed_frames and previous_path != baseline_path:
                 frame_provider.delete_frame(previous_path)
@@ -84,7 +85,6 @@ def process_sessions(
         numbered: list[tuple[DetectedRegion, str]] = [
             (element, f"elem_{index + 1:04d}") for index, element in enumerate(merged)
         ]
-        tooltip_map = _pair_tooltips(numbered)
 
         def has_text(item: DetectedRegion) -> bool:
             return bool(item.text and item.text.strip())
@@ -105,15 +105,7 @@ def process_sessions(
                         "text": element.text,
                         "confidence": element.confidence,
                         "source": element.source,
-                        "tooltip": (
-                            {
-                                "text": tooltip_map[element_id].text,
-                                "confidence": tooltip_map[element_id].confidence,
-                                "bbox": asdict(tooltip_map[element_id].bbox),
-                            }
-                            if element_id in tooltip_map
-                            else None
-                        ),
+                        "tooltips": [],
                     }
                     for element, element_id in items
                 ],
@@ -265,7 +257,8 @@ def _write_per_frame_outputs(
     session_path: Path,
     baseline_path: Path,
     frame_path: Path,
-    elements: list[DetectedRegion],
+    primary: DetectedRegion | None,
+    tooltips: list[DetectedRegion],
 ) -> None:
     """Write per-frame debug payload and crops next to the frame."""
     frame_dir = session_path / frame_path.stem
@@ -273,10 +266,11 @@ def _write_per_frame_outputs(
     # Keep originals handy for visual inspection.
     shutil.copy2(frame_path, frame_dir / frame_path.name)
     shutil.copy2(baseline_path, frame_dir / "baseline.png")
-    numbered: list[tuple[DetectedRegion, str]] = [
-        (element, f"elem_{index + 1:04d}") for index, element in enumerate(elements)
-    ]
-    tooltip_map = _pair_tooltips(numbered)
+
+    numbered: list[tuple[DetectedRegion, str]] = []
+    if primary is not None:
+        numbered.append((primary, "elem_0001"))
+
     payload = {
         "schema_version": "1.0",
         "baseline": baseline_path.name,
@@ -288,15 +282,15 @@ def _write_per_frame_outputs(
                 "text": element.text,
                 "confidence": element.confidence,
                 "source": element.source,
-                "tooltip": (
+                "tooltips": [
                     {
-                        "text": tooltip_map[element_id].text,
-                        "confidence": tooltip_map[element_id].confidence,
-                        "bbox": asdict(tooltip_map[element_id].bbox),
+                        "bbox": asdict(tt.bbox),
+                        "text": tt.text,
+                        "confidence": tt.confidence,
+                        "source": tt.source,
                     }
-                    if element_id in tooltip_map
-                    else None
-                ),
+                    for tt in tooltips
+                ],
             }
             for element, element_id in numbered
         ],
@@ -308,70 +302,51 @@ def _write_per_frame_outputs(
             bbox = element.bbox
             crop = frame_image.crop((bbox.x, bbox.y, bbox.x + bbox.w, bbox.y + bbox.h))
             crop.save(frame_dir / f"{element_id}.png")
+        for index, tt in enumerate(tooltips, start=1):
+            bbox = tt.bbox
+            crop = frame_image.crop((bbox.x, bbox.y, bbox.x + bbox.w, bbox.y + bbox.h))
+            crop.save(frame_dir / f"tooltip_{index:02d}.png")
 
 
-def _pair_tooltips(items: list[tuple[DetectedRegion, str]]) -> dict[str, DetectedRegion]:
+def _separate_primary_and_tooltips(
+    frame_path: Path, regions: list[DetectedRegion]
+) -> tuple[DetectedRegion | None, list[DetectedRegion]]:
+    """Choose the region containing the click point as primary; others become tooltips."""
+    if not regions:
+        return None, []
+
+    click_point = _parse_click_point(frame_path.name)
+    if click_point is None:
+        # Fall back to first as primary
+        return regions[0], regions[1:]
+
+    containing = [
+        region for region in regions if _contains_point(region.bbox, click_point)
+    ]
+    if not containing:
+        return regions[0], regions[1:]
+
+    primary = min(containing, key=lambda r: r.bbox.w * r.bbox.h)
+    tooltips = [region for region in regions if region is not primary]
+    return primary, tooltips
+
+
+def _parse_click_point(name: str) -> Tuple[int, int] | None:
     """
-    Attempt to pair each element with a likely tooltip region.
-
-    Heuristic: choose the nearest larger box with different text; prefer closer
-    and modest-size candidates; ignore empty-text regions. Requires non-overlap.
+    Extract click point from frame filename: frame_000001_x_y.png -> (x, y).
+    Returns None if pattern is not present.
     """
-    tooltip_map: dict[str, DetectedRegion] = {}
-    for element, element_id in items:
-        if not element.text:
-            continue
-
-        best: DetectedRegion | None = None
-        best_score = float("inf")
-        for candidate, _ in items:
-            if candidate is element or not candidate.text:
-                continue
-
-            if _same_text(element.text, candidate.text):
-                continue
-
-            if _bbox_area(candidate.bbox) <= _bbox_area(element.bbox) * 1.2:
-                continue
-
-            gap = _edge_distance(element.bbox, candidate.bbox)
-            if gap > 300:
-                continue
-
-            if _overlaps(element.bbox, candidate.bbox):
-                continue
-
-            score = gap + _bbox_area(candidate.bbox) * 1e-5
-            if score < best_score:
-                best_score = score
-                best = candidate
-
-        if best is not None:
-            tooltip_map[element_id] = best
-
-    return tooltip_map
+    stem = Path(name).stem
+    parts = stem.split("_")
+    if len(parts) >= 3 and parts[-1].isdigit() and parts[-2].isdigit():
+        return int(parts[-2]), int(parts[-1])
+    return None
 
 
-def _bbox_area(bbox: BoundingBox) -> int:
-    """Compute area of a bounding box."""
-    return max(0, bbox.w) * max(0, bbox.h)
-
-
-def _edge_distance(a: BoundingBox, b: BoundingBox) -> float:
-    """Minimum edge-to-edge distance between two boxes (0 if overlapping)."""
-    dx = max(0, max(a.x, b.x) - min(a.x + a.w, b.x + b.w))
-    dy = max(0, max(a.y, b.y) - min(a.y + a.h, b.y + b.h))
-    return (dx ** 2 + dy ** 2) ** 0.5
-
-
-def _overlaps(a: BoundingBox, b: BoundingBox) -> bool:
-    """Return True when two boxes overlap."""
-    return not (
-        a.x + a.w <= b.x
-        or b.x + b.w <= a.x
-        or a.y + a.h <= b.y
-        or b.y + b.h <= a.y
-    )
+def _contains_point(bbox: BoundingBox, point: Tuple[int, int]) -> bool:
+    """Return True if point (x, y) lies within bbox."""
+    x, y = point
+    return bbox.x <= x <= bbox.x + bbox.w and bbox.y <= y <= bbox.y + bbox.h
 
 
 def _same_text(a: str | None, b: str | None) -> bool:

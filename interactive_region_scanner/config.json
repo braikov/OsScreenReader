@@ -1,8 +1,9 @@
 {
   "root": "C:\\temp\\OsScreenReader",
-  "language": ["en"],
+  "language": [ "en" ],
   "diff_threshold": 30,
   "min_area": 50,
   "iou_threshold": 0.5,
-  "use_gpu": true
+  "use_gpu": true,
+  "delete_frames": false
 }

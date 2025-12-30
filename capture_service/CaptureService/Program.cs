@@ -105,7 +105,7 @@ internal sealed class HotkeyContext : ApplicationContext
 
                 Cursor.Position = new Point(x, y);
                 Thread.Sleep(interCaptureDelayMs);
-                var framePath = Path.Combine(framesFolder, $"frame_{savedCount + 1:D6}.png");
+                var framePath = Path.Combine(framesFolder, $"frame_{savedCount + 1:D6}_{x}_{y}.png");
                 if (TrySaveScreenshotIfDifferent(framePath, bounds, baselineHash, previousHash, out var currentHash, out var newSize))
                 {
                     previousHash = currentHash;
