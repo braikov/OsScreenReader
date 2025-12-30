@@ -44,27 +44,30 @@ def process_sessions(
         for index, frame_path in enumerate(frames, start=1):
             frame_start = time.perf_counter()
             regions = diff_detector.find_regions(previous_path, frame_path)
+            per_frame_elements: list[DetectedRegion] = []
             for region in regions:
                 ocr_result = ocr_engine.recognize(frame_path, region)
                 if ocr_result is None:
-                    elements.append(
-                        DetectedRegion(
-                            bbox=region,
-                            text=None,
-                            confidence=0.0,
-                            source="hover-diff",
-                        )
-                    )
-                    continue
-
-                elements.append(
-                    DetectedRegion(
+                    detected = DetectedRegion(
                         bbox=region,
-                        text=ocr_result.text,
-                        confidence=ocr_result.confidence,
+                        text=None,
+                        confidence=0.0,
                         source="hover-diff",
                     )
+                    elements.append(detected)
+                    per_frame_elements.append(detected)
+                    continue
+
+                detected = DetectedRegion(
+                    bbox=region,
+                    text=ocr_result.text,
+                    confidence=ocr_result.confidence,
+                    source="hover-diff",
                 )
+                elements.append(detected)
+                per_frame_elements.append(detected)
+
+            _write_per_frame_outputs(session_path, baseline_path, frame_path, per_frame_elements)
 
             if previous_path != baseline_path:
                 frame_provider.delete_frame(previous_path)
@@ -225,3 +228,36 @@ class IoUDeduplicator(RegionDeduplicator):
         intersection = (x_right - x_left) * (y_bottom - y_top)
         union = a.w * a.h + b.w * b.h - intersection
         return intersection / union if union > 0 else 0.0
+
+
+def _write_per_frame_outputs(
+    session_path: Path,
+    baseline_path: Path,
+    frame_path: Path,
+    elements: list[DetectedRegion],
+) -> None:
+    """Write per-frame debug payload and crops next to the frame."""
+    frame_dir = session_path / frame_path.stem
+    frame_dir.mkdir(exist_ok=True)
+    payload = {
+        "schema_version": "1.0",
+        "baseline": baseline_path.name,
+        "frame": frame_path.name,
+        "elements": [
+            {
+                "id": f"elem_{index + 1:04d}",
+                "bbox": asdict(element.bbox),
+                "text": element.text,
+                "confidence": element.confidence,
+                "source": element.source,
+            }
+            for index, element in enumerate(elements)
+        ],
+    }
+    (frame_dir / "result.json").write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    with Image.open(frame_path) as frame_image:
+        for index, element in enumerate(elements, start=1):
+            bbox = element.bbox
+            crop = frame_image.crop((bbox.x, bbox.y, bbox.x + bbox.w, bbox.y + bbox.h))
+            crop.save(frame_dir / f"elem_{index:04d}.png")
