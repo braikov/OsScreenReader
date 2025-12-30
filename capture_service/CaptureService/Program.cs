@@ -82,14 +82,16 @@ internal sealed class HotkeyContext : ApplicationContext
         Directory.CreateDirectory(framesFolder);
 
         var savedCount = 0;
+        var attemptedCount = 0;
         for (var y = bounds.Top; y < bounds.Bottom; y += stepPixels)
         {
             for (var x = bounds.Left; x < bounds.Right; x += stepPixels)
             {
-                if (savedCount >= maxScreenshots)
+                attemptedCount++;
+                if (attemptedCount > maxScreenshots)
                 {
                     MessageBox.Show(
-                        $"Reached max screenshots limit ({maxScreenshots}).",
+                        $"Reached max screenshots limit ({maxScreenshots}) after {savedCount} saved.",
                         "Capture Service",
                         MessageBoxButtons.OK,
                         MessageBoxIcon.Information);
@@ -107,7 +109,7 @@ internal sealed class HotkeyContext : ApplicationContext
         }
 
         MessageBox.Show(
-            $"Saved baseline and {savedCount} frames to {sessionFolder}",
+            $"Saved baseline and {savedCount} frames (attempted {attemptedCount}) to {sessionFolder}",
             "Capture Service",
             MessageBoxButtons.OK,
             MessageBoxIcon.Information);
