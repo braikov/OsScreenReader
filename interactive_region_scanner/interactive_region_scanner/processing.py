@@ -41,6 +41,7 @@ def process_sessions(
         frames = list(frame_provider.frame_paths(session_path))
         total_frames = len(frames)
         elements: list[DetectedRegion] = []
+        element_frame_index: dict[int, int] = {}
 
         previous_path = baseline_path
         for index, frame_path in enumerate(frames, start=1):
@@ -57,6 +58,7 @@ def process_sessions(
                         source="hover-diff",
                     )
                     per_frame_elements.append(detected)
+                    element_frame_index[id(detected)] = index
                     continue
 
                 detected = DetectedRegion(
@@ -66,10 +68,12 @@ def process_sessions(
                     source="hover-diff",
                 )
                 per_frame_elements.append(detected)
+                element_frame_index[id(detected)] = index
 
             primary, tooltips = _separate_primary_and_tooltips(frame_path, per_frame_elements)
             if primary is not None:
                 elements.append(primary)
+                element_frame_index[id(primary)] = index
             _write_per_frame_outputs(session_path, baseline_path, frame_path, primary, tooltips)
 
             if delete_processed_frames and previous_path != baseline_path:
@@ -82,8 +86,12 @@ def process_sessions(
             frame_provider.delete_frame(previous_path)
 
         merged = deduplicator.merge(elements)
+        sorted_merged = sorted(
+            enumerate(merged),
+            key=lambda pair: (element_frame_index.get(id(pair[1]), 0), pair[0]),
+        )
         numbered: list[tuple[DetectedRegion, str]] = [
-            (element, f"elem_{index + 1:04d}") for index, element in enumerate(merged)
+            (element, f"elem_{idx + 1:04d}") for idx, element in sorted_merged
         ]
 
         def has_text(item: DetectedRegion) -> bool:
