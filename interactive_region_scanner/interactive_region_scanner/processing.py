@@ -99,7 +99,7 @@ def process_sessions(
 
         with_text = [pair for pair in numbered if has_text(pair[0])]
         without_text = [pair for pair in numbered if not has_text(pair[0])]
-        sorted_with_text = sorted(with_text, key=lambda pair: pair[0].text.strip().lower()) if with_text else []
+        sorted_with_text = with_text  # preserve frame order
 
         def build_payload(items: list[tuple[DetectedRegion, str]]) -> dict:
             return {
