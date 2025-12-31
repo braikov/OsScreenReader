@@ -111,6 +111,10 @@ internal sealed class UiaSnapshotter
 
             return node;
         }
+        catch (OperationCanceledException)
+        {
+            return null;
+        }
         catch (Exception ex) when (IsExpected(ex))
         {
             return null;
@@ -131,6 +135,10 @@ internal sealed class UiaSnapshotter
                 child = walker.GetNextSibling(child);
                 token.ThrowIfCancellationRequested();
             }
+        }
+        catch (OperationCanceledException)
+        {
+            // Cancellation requested; return what we have.
         }
         catch (Exception ex) when (IsExpected(ex))
         {
