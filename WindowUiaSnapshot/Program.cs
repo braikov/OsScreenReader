@@ -3,6 +3,9 @@ using System.Windows.Forms;
 
 namespace WindowUiaSnapshot;
 
+/// <summary>
+/// Application entry point wiring the tray context.
+/// </summary>
 internal static class Program
 {
     [STAThread]

@@ -1,14 +1,20 @@
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Windows.Automation;
+using WindowUiaSnapshot.Models;
 
 namespace WindowUiaSnapshot;
 
+/// <summary>
+/// Enumerates top-level visible windows and applies basic filtering.
+/// </summary>
 internal sealed class WindowEnumerator
 {
+    /// <summary>
+    /// Enumerate visible top-level windows that pass basic filters.
+    /// </summary>
     public IReadOnlyList<WindowSnapshot> EnumerateVisibleWindows()
     {
         var results = new List<WindowSnapshot>();

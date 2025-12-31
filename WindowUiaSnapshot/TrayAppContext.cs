@@ -1,12 +1,15 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using WindowUiaSnapshot.Models;
 
 namespace WindowUiaSnapshot;
 
+/// <summary>
+/// Application context hosting the tray icon, menu, and snapshot orchestration.
+/// </summary>
 internal sealed class TrayAppContext : ApplicationContext
 {
     private readonly NotifyIcon _notifyIcon;
@@ -21,6 +24,9 @@ internal sealed class TrayAppContext : ApplicationContext
         _hotkeyManager.RegisterHotkey(Keys.W, ctrl: true, alt: true);
     }
 
+    /// <summary>
+    /// Create tray icon with context menu items.
+    /// </summary>
     private NotifyIcon BuildNotifyIcon()
     {
         var menu = new ContextMenuStrip();
@@ -38,6 +44,9 @@ internal sealed class TrayAppContext : ApplicationContext
         };
     }
 
+    /// <summary>
+    /// Open the snapshot output directory in Explorer.
+    /// </summary>
     private void OpenOutputFolder()
     {
         try
@@ -52,6 +61,9 @@ internal sealed class TrayAppContext : ApplicationContext
         }
     }
 
+    /// <summary>
+    /// Fire a snapshot if one is not already running.
+    /// </summary>
     private void TriggerSnapshot()
     {
         if (_isSnapshotInProgress)
@@ -64,6 +76,9 @@ internal sealed class TrayAppContext : ApplicationContext
         _ = RunSnapshotAsync();
     }
 
+    /// <summary>
+    /// Run the snapshot logic on an STA background thread to allow UIA calls.
+    /// </summary>
     private async Task RunSnapshotAsync()
     {
         try
@@ -97,6 +112,9 @@ internal sealed class TrayAppContext : ApplicationContext
         }
     }
 
+    /// <summary>
+    /// Perform a single snapshot of all visible windows.
+    /// </summary>
     private void SnapshotOnce()
     {
         var enumerator = new WindowEnumerator();
@@ -117,6 +135,9 @@ internal sealed class TrayAppContext : ApplicationContext
         writer.WriteAsync(root).GetAwaiter().GetResult();
     }
 
+    /// <summary>
+    /// Parse a hex hwnd string into an IntPtr.
+    /// </summary>
     private static IntPtr ParseHandle(string hwndHex)
     {
         try
@@ -129,6 +150,9 @@ internal sealed class TrayAppContext : ApplicationContext
         }
     }
 
+    /// <summary>
+    /// Display a balloon notification from the tray icon.
+    /// </summary>
     private void ShowBalloon(string message)
     {
         _notifyIcon.BalloonTipTitle = "Window UIA Snapshot";

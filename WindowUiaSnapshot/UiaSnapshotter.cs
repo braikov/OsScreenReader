@@ -1,12 +1,15 @@
 using System;
 using System.Collections.Generic;
-using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Automation;
+using WindowUiaSnapshot.Models;
 
 namespace WindowUiaSnapshot;
 
+/// <summary>
+/// Builds UI Automation trees with depth/child limits and timeouts.
+/// </summary>
 internal sealed class UiaSnapshotter
 {
     private readonly int _maxDepth;
@@ -20,6 +23,9 @@ internal sealed class UiaSnapshotter
         _timeoutPerWindowMs = timeoutPerWindowMs;
     }
 
+    /// <summary>
+    /// Capture a UIA subtree for a given window handle with timeout.
+    /// </summary>
     public async Task<(UiaNode? node, string? error)> SnapshotAsync(IntPtr hwnd)
     {
         using var cts = new CancellationTokenSource(_timeoutPerWindowMs);

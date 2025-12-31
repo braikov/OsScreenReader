@@ -3,9 +3,13 @@ using System.IO;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading.Tasks;
+using WindowUiaSnapshot.Models;
 
 namespace WindowUiaSnapshot;
 
+/// <summary>
+/// Serializes snapshots to disk under the local app data folder.
+/// </summary>
 internal sealed class SnapshotWriter
 {
     private readonly string _outputRoot;

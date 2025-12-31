@@ -4,6 +4,9 @@ using System.Windows.Forms;
 
 namespace WindowUiaSnapshot;
 
+/// <summary>
+/// Manages registration and dispatch of a single global hotkey.
+/// </summary>
 internal sealed class HotkeyManager : NativeWindow, IDisposable
 {
     private const int WmHotkey = 0x0312;
